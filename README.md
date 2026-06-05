@@ -2,7 +2,7 @@
 
 Team chat in the VS Code sidebar, backed by your own [PocketBase](https://pocketbase.io/) server. Sign in, send messages, and see everyone else's messages in a shared room.
 
-Live at https://marketplace.visualstudio.com/items?itemName=AndyStudios.studiocodechat&ssr=false#review-details
+Live at https://marketplace.visualstudio.com/items?itemName=AndyStudios.studiocodechat&ssr=false#overview
 
 ## Features
 
