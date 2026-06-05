@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import dotenv from 'dotenv';
-import { getPocketBaseUrl } from './config';
+import { getPocketBaseUrl, isPocketBaseUrlConfigured, promptForSetupIfNeeded } from './config';
 import { log, logError } from './logger';
 import { resolveDisplayName } from './messageUtils';
 
@@ -22,6 +22,10 @@ interface PocketBaseClient {
 			options?: { sort?: string; expand?: string }
 		): Promise<{ items: T[]; totalItems: number }>;
 		create<T>(data: Record<string, unknown>): Promise<T>;
+		subscribe<T>(
+			topic: string,
+			callback: (data: { action: string; record: T }) => void
+		): Promise<() => void>;
 	};
 }
 
@@ -57,7 +61,12 @@ export class PocketBaseService {
 	static init(context: vscode.ExtensionContext): void {
 		this.context = context;
 		dotenv.config({ path: path.join(context.extensionPath, '.env') });
-		void this.getClient();
+
+		if (getPocketBaseUrl()) {
+			void this.getClient().catch((error) => {
+				logError('Failed to initialize PocketBase client', error);
+			});
+		}
 	}
 
 	static isAuthenticated(): boolean {
@@ -85,10 +94,18 @@ export class PocketBaseService {
 	}
 
 	static async signIn(): Promise<boolean> {
+		const needsSetup = !isPocketBaseUrlConfigured();
+		if (!(await promptForSetupIfNeeded())) {
+			return false;
+		}
+
+		if (needsSetup) {
+			this.resetClient();
+		}
+
 		const identity = await vscode.window.showInputBox({
-			title: 'Sign in to codeChat',
+			title: 'Sign in to Studio Chat',
 			prompt: 'PocketBase email or username',
-			placeHolder: 'andrew or you@example.com',
 			ignoreFocusOut: true,
 			validateInput: (value) => (value.trim().length > 0 ? undefined : 'Email or username is required.'),
 		});
@@ -97,7 +114,7 @@ export class PocketBaseService {
 		}
 
 		const password = await vscode.window.showInputBox({
-			title: 'Sign in to codeChat',
+			title: 'Sign in to Studio Chat',
 			prompt: 'PocketBase password',
 			password: true,
 			ignoreFocusOut: true,
@@ -136,6 +153,11 @@ export class PocketBaseService {
 		return 'Sign in to load messages.';
 	}
 
+	static resetClient(): void {
+		this.client = undefined;
+		this.clientReady = undefined;
+	}
+
 	private static async createClient(): Promise<PocketBaseClient> {
 		const context = this.context;
 		if (!context) {
@@ -156,7 +178,7 @@ export class PocketBaseService {
 		const url = getPocketBaseUrl();
 		if (!url) {
 			throw new Error(
-				'PocketBase URL is not configured. Set POCKETBASE_URL in .env or codechat.pocketbaseUrl in VS Code settings.'
+				'PocketBase URL is not configured. Sign in to Studio Chat to enter your server URL, or set codechat.pocketbaseUrl in VS Code settings.'
 			);
 		}
 

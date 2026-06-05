@@ -1,14 +1,20 @@
 {
-  "name": "codechat",
-  "displayName": "codeChat",
-  "description": "Team chat sidebar for VS Code, backed by PocketBase.",
-  "version": "0.0.1",
+  "name": "studiocodechat",
+  "displayName": "Studio Chat",
+  "description": "Team chat sidebar for VS Code. Connect to your PocketBase server — credentials stay in VS Code Secret Storage.",
+  "version": "0.0.8",
+  "publisher": "AndyStudios",
+  "license": "MIT",
   "engines": {
-    "vscode": "^1.120.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AndrewDeAsevedo/codeSpeak.git"
+  },
   "main": "./out/extension.js",
   "contributes": {
     "views": {
@@ -16,40 +22,46 @@
         {
           "type": "webview",
           "id": "codechat.chat",
-          "name": "codeChat",
-          "contextualTitle": "codeChat"
+          "name": "Studio Chat",
+          "contextualTitle": "Studio Chat"
         }
       ]
     },
     "commands": [
       {
         "command": "codechat.openChat",
-        "title": "Focus codeChat",
-        "category": "codeChat"
+        "title": "Focus Studio Chat",
+        "category": "Studio Chat"
       },
       {
         "command": "codechat.signIn",
         "title": "Sign In",
-        "category": "codeChat"
+        "category": "Studio Chat"
       },
       {
         "command": "codechat.signOut",
         "title": "Sign Out",
-        "category": "codeChat"
+        "category": "Studio Chat"
       },
       {
         "command": "codechat.showLogs",
         "title": "Show Logs",
-        "category": "codeChat"
+        "category": "Studio Chat"
       }
     ],
     "configuration": {
-      "title": "codeChat",
+      "title": "Studio Chat",
       "properties": {
         "codechat.pocketbaseUrl": {
           "type": "string",
           "default": "",
-          "description": "PocketBase server URL. Overrides POCKETBASE_URL from .env when set."
+          "description": "PocketBase server URL. Prefer entering this during sign-in rather than hard-coding a shared URL in committed settings."
+        },
+        "codechat.syncIntervalSeconds": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "How often to poll for new messages (seconds). Set to 0 to use realtime only."
         }
       }
     },
@@ -72,7 +84,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.120.0",
+    "@types/vscode": "^1.85.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",

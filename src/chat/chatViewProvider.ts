@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getChatHtml } from './getChatHtml';
-import { logError } from './logger';
+import { getSyncIntervalMs } from './config';
+import { log, logError } from './logger';
 import {
 	getMessageAuthor,
 	getMessageSide,
@@ -19,6 +20,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view: vscode.WebviewView | undefined;
 	private webviewReady = false;
 	private pendingReload = false;
+	private loadedMessageIds = new Set<string>();
+	private syncTimer: NodeJS.Timeout | undefined;
+	private realtimeUnsubscribe: (() => void) | undefined;
+	private syncInProgress = false;
 
 	constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -38,7 +43,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.onDidReceiveMessage((message) => {
 			void this.handleMessage(message);
 		});
+		webviewView.onDidChangeVisibility(() => {
+			if (webviewView.visible) {
+				void this.syncNewMessages();
+				this.startMessageSync();
+			} else {
+				this.stopMessageSync();
+			}
+		});
 		webviewView.onDidDispose(() => {
+			this.stopMessageSync();
 			this.view = undefined;
 			this.webviewReady = false;
 		});
@@ -50,6 +64,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 	public onAuthChanged(): void {
 		this.reloadChat();
+	}
+
+	public dispose(): void {
+		this.stopMessageSync();
 	}
 
 	private postMessage(message: ExtensionToWebviewMessage): void {
@@ -66,8 +84,59 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
+		this.stopMessageSync();
+		this.loadedMessageIds.clear();
 		this.postMessage({ type: 'clearMessages' });
 		void this.loadMessages();
+	}
+
+	private startMessageSync(): void {
+		this.stopMessageSync();
+
+		if (!this.webviewReady || !this.view?.visible) {
+			return;
+		}
+
+		void this.setupRealtime();
+
+		const intervalMs = getSyncIntervalMs();
+		if (intervalMs > 0) {
+			this.syncTimer = setInterval(() => {
+				void this.syncNewMessages();
+			}, intervalMs);
+		}
+	}
+
+	private stopMessageSync(): void {
+		if (this.syncTimer) {
+			clearInterval(this.syncTimer);
+			this.syncTimer = undefined;
+		}
+
+		if (this.realtimeUnsubscribe) {
+			this.realtimeUnsubscribe();
+			this.realtimeUnsubscribe = undefined;
+		}
+	}
+
+	private async setupRealtime(): Promise<void> {
+		try {
+			const client = await PocketBaseService.getClient();
+			if (!client.authStore.isValid) {
+				return;
+			}
+
+			this.realtimeUnsubscribe = await client.collection('messages').subscribe<MessageRecord>(
+				'*',
+				(event) => {
+					if (event.action === 'create') {
+						void this.syncNewMessages();
+					}
+				}
+			);
+		} catch (error) {
+			logError('Realtime subscribe failed; polling will still run', error);
+		}
 	}
 
 	private async fetchMessages(): Promise<MessageRecord[]> {
@@ -95,6 +164,51 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		};
 	}
 
+	private appendRecords(records: MessageRecord[], currentUserId: string): number {
+		let messageCount = 0;
+
+		for (const record of records) {
+			if (this.loadedMessageIds.has(record.id)) {
+				continue;
+			}
+
+			const text = getMessageText(record);
+			if (!text) {
+				continue;
+			}
+
+			this.loadedMessageIds.add(record.id);
+			messageCount += 1;
+			this.postMessage(this.toAppendMessage(record, currentUserId));
+		}
+
+		return messageCount;
+	}
+
+	private async syncNewMessages(): Promise<void> {
+		if (!this.webviewReady || !this.view?.visible || this.syncInProgress) {
+			return;
+		}
+
+		this.syncInProgress = true;
+
+		try {
+			const client = await PocketBaseService.getClient();
+			if (!client.authStore.isValid) {
+				this.stopMessageSync();
+				this.postMessage({ type: 'setAuthState', signedIn: false });
+				return;
+			}
+
+			const records = await this.fetchMessages();
+			this.appendRecords(records, PocketBaseService.getUserId() ?? '');
+		} catch (error) {
+			logError('syncNewMessages failed', error);
+		} finally {
+			this.syncInProgress = false;
+		}
+	}
+
 	private async loadMessages(): Promise<void> {
 		try {
 			const client = await PocketBaseService.getClient();
@@ -108,22 +222,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			this.postMessage({ type: 'setAuthState', signedIn: true, user });
 
 			const records = await this.fetchMessages();
-			let messageCount = 0;
-
-			for (const record of records) {
-				const text = getMessageText(record);
-				if (!text) {
-					continue;
-				}
-
-				messageCount += 1;
-				this.postMessage(this.toAppendMessage(record, currentUserId));
-			}
+			const messageCount = this.appendRecords(records, currentUserId);
 
 			if (messageCount === 0) {
 				this.postMessage({ type: 'error', message: EMPTY_MESSAGES_ERROR });
 				this.postMessage({ type: 'setAuthState', signedIn: true, user });
 			}
+
+			this.startMessageSync();
 		} catch (error) {
 			logError('loadMessages failed', error);
 			this.postMessage({ type: 'error', message: formatPocketBaseError(error) });
@@ -145,6 +251,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				}
 				break;
 			case 'signOut':
+				this.stopMessageSync();
+				this.loadedMessageIds.clear();
 				await PocketBaseService.signOut();
 				this.postMessage({ type: 'clearMessages' });
 				this.postMessage({ type: 'setAuthState', signedIn: false });
@@ -170,10 +278,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		this.postMessage({ type: 'setLoading', loading: true });
 
 		try {
-			await client.collection('messages').create({
+			const record = await client.collection('messages').create<MessageRecord>({
 				text,
 				user: client.authStore.record.id,
 			});
+			this.loadedMessageIds.add(record.id);
 		} catch (error) {
 			logError('saveMessage failed', error);
 			this.postMessage({ type: 'error', message: formatPocketBaseError(error) });

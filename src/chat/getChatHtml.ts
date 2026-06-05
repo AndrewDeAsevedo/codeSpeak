@@ -208,7 +208,7 @@ export function getChatHtml(): string {
 	</div>
 	<div id="status"></div>
 	<form id="composer">
-		<textarea id="input" rows="1" placeholder="Ask codeChat..." aria-label="Message input"></textarea>
+		<textarea id="input" rows="1" aria-label="Message input"></textarea>
 		<button type="button" id="clear" title="Clear chat">Clear</button>
 		<button type="submit" id="send">Send</button>
 	</form>

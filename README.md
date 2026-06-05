@@ -1,36 +1,78 @@
-# codeChat
+# Studio Chat
 
-A VS Code sidebar chat extension backed by [PocketBase](https://pocketbase.io/). Sign in, send messages, and see everyone else's messages in a shared room.
+Team chat in the VS Code sidebar, backed by your own [PocketBase](https://pocketbase.io/) server. Sign in, send messages, and see everyone else's messages in a shared room.
 
 ## Features
 
 - Sidebar chat panel in the Explorer view
-- PocketBase authentication with saved sessions
+- PocketBase sign-in with sessions saved securely in VS Code Secret Storage
 - Shared message history loaded on sign-in
+- New messages sync via PocketBase realtime and polling (every 5 seconds by default)
 - Your messages on the right, everyone else's on the left
-- Author names shown above each message
+- Author names on message groups
 
-## Getting Started
+## Quick start
 
-### 1. Install dependencies
+1. Install **Studio Chat** from the Marketplace (or from a VSIX).
+2. Open the **Studio Chat** panel in the sidebar, or press **Cmd+Shift+C** (Mac) / **Ctrl+Shift+C** (Windows/Linux).
+3. Click **Sign In** (or run **Studio Chat: Sign In** from the Command Palette).
 
-```bash
-npm install
+On first sign-in you will be prompted for:
+
+1. **PocketBase server URL** — the URL your team admin gave you (e.g. `https://your-server.example`)
+2. **Sync interval** — how often to poll for new messages in seconds (`0` = realtime only)
+3. **Username or email** and **password** for your PocketBase account
+
+Settings from step 1–2 are saved to your VS Code user settings. Credentials are never written to settings files.
+
+## Security
+
+**Do not commit or share:**
+
+- PocketBase server URLs in public repos, screenshots, or chat unless your team intends them to be public
+- Usernames, passwords, or auth tokens
+- `.env` files used for local development
+
+**How Studio Chat stores data:**
+
+| Data | Where it goes |
+|------|----------------|
+| PocketBase URL | VS Code user settings (`codechat.pocketbaseUrl`) |
+| Sync interval | VS Code user settings (`codechat.syncIntervalSeconds`) |
+| Auth session | VS Code Secret Storage (encrypted by the editor) |
+
+Sign in through the extension UI — do not put passwords in `settings.json`, `.env`, or the README.
+
+## Configuration (optional)
+
+Most users only need the first-time sign-in prompts. You can also set these in VS Code settings:
+
+| Setting | Description |
+|---------|-------------|
+| `codechat.pocketbaseUrl` | PocketBase server URL |
+| `codechat.syncIntervalSeconds` | Poll interval in seconds (default `5`; `0` = realtime only) |
+
+Example (use your team's URL, not a shared demo value):
+
+```json
+{
+  "codechat.pocketbaseUrl": "https://your-server.example",
+  "codechat.syncIntervalSeconds": 5
+}
 ```
 
-### 2. Run the extension
+## Commands
 
-Press **F5** in VS Code to launch the Extension Development Host, then open the **codeChat** panel in the sidebar.
+| Command | Description |
+|---------|-------------|
+| `Studio Chat: Focus Studio Chat` | Open the chat sidebar |
+| `Studio Chat: Sign In` | Sign in to PocketBase |
+| `Studio Chat: Sign Out` | Clear the saved session |
+| `Studio Chat: Show Logs` | Open the Studio Chat output channel |
 
-You can also focus the panel with **Cmd+Shift+C** (Mac) or **Ctrl+Shift+C** (Windows/Linux).
+## PocketBase setup (server admins)
 
-### 3. Sign in
-
-Click **Sign In** in the chat panel, or run **codeChat: Sign In** from the Command Palette. Use your PocketBase username or email and password.
-
-## PocketBase Setup
-
-codeChat expects a PocketBase instance with a `users` auth collection and a `messages` collection.
+Studio Chat expects a PocketBase instance with a `users` auth collection and a `messages` collection.
 
 ### `messages` collection fields
 
@@ -41,7 +83,7 @@ codeChat expects a PocketBase instance with a `users` auth collection and a `mes
 
 ### API rules
 
-Authenticated users must be able to create and list messages. In the PocketBase admin, set these rules on the `messages` collection:
+Set these on the `messages` collection:
 
 | Rule | Value |
 |------|-------|
@@ -57,65 +99,21 @@ On the `users` collection, allow authenticated users to view records so author n
 
 If messages save but do not load, the **List/Search** rule is almost always the problem.
 
-## Configuration
-
-Set your PocketBase server URL using **one** of these (VS Code setting wins if both are set):
-
-### Option A: `.env` (recommended for local dev)
-
-```bash
-cp .env.example .env
-```
-
-```env
-POCKETBASE_URL=https://your-instance.pockethost.io/
-```
-
-`.env` is gitignored. Never put passwords or API keys in it — sign in through the extension instead.
-
-### Option B: VS Code settings
-
-```json
-{
-  "codechat.pocketbaseUrl": "https://your-instance.pockethost.io/"
-}
-```
-
-| Setting | Description |
-|---------|-------------|
-| `codechat.pocketbaseUrl` | PocketBase server URL (overrides `.env`) |
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `codeChat: Focus codeChat` | Open the chat sidebar |
-| `codeChat: Sign In` | Sign in to PocketBase |
-| `codeChat: Sign Out` | Clear the saved session |
-| `codeChat: Show Logs` | Open the codeChat output channel |
-
 ## Development
 
+For local extension development only:
+
 ```bash
-npm run compile   # Build TypeScript
+npm install
+npm run compile
+```
+
+Press **F5** to launch the Extension Development Host. You may copy `.env.example` to `.env` and set `POCKETBASE_URL` for local runs — `.env` is gitignored and is **not** included in the published VSIX.
+
+```bash
 npm run watch     # Watch mode
 npm run lint      # ESLint
-npm test          # Run tests in a VS Code test host
-```
-
-### Project structure
-
-```
-src/
-  extension.ts           # Extension entry point
-  chat/
-    chatViewProvider.ts  # Sidebar webview and message flow
-    pocketbaseClient.ts  # Auth and PocketBase client
-    messageUtils.ts      # Message parsing helpers
-    getChatHtml.ts       # Webview UI
-    types.ts             # Webview message types
-    logger.ts            # Output channel logging
-  test/                  # Unit and integration tests
+npm test          # Run tests
 ```
 
 ## License

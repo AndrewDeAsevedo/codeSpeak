@@ -14,7 +14,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			ChatViewProvider.viewType,
 			chatViewProvider,
 			{ webviewOptions: { retainContextWhenHidden: true } }
-		)
+		),
+		{ dispose: () => chatViewProvider.dispose() }
 	);
 
 	context.subscriptions.push(
