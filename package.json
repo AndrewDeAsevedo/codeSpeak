@@ -1,7 +1,7 @@
 {
   "name": "codechat",
   "displayName": "codeChat",
-  "description": "",
+  "description": "Team chat sidebar for VS Code, backed by PocketBase.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.120.0"
@@ -26,8 +26,33 @@
         "command": "codechat.openChat",
         "title": "Focus codeChat",
         "category": "codeChat"
+      },
+      {
+        "command": "codechat.signIn",
+        "title": "Sign In",
+        "category": "codeChat"
+      },
+      {
+        "command": "codechat.signOut",
+        "title": "Sign Out",
+        "category": "codeChat"
+      },
+      {
+        "command": "codechat.showLogs",
+        "title": "Show Logs",
+        "category": "codeChat"
       }
     ],
+    "configuration": {
+      "title": "codeChat",
+      "properties": {
+        "codechat.pocketbaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "PocketBase server URL. Overrides POCKETBASE_URL from .env when set."
+        }
+      }
+    },
     "keybindings": [
       {
         "command": "codechat.openChat",
@@ -36,7 +61,6 @@
       }
     ]
   },
-  
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
@@ -46,14 +70,17 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.120.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
+    "@types/vscode": "^1.120.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.56.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pocketbase": "^0.27.0"
   }
-  
 }

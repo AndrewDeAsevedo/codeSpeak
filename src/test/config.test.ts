@@ -1,0 +1,21 @@
+import * as assert from 'assert';
+import { resolvePocketBaseUrl } from '../chat/config';
+
+suite('config', () => {
+	test('resolvePocketBaseUrl prefers VS Code setting over env', () => {
+		assert.strictEqual(
+			resolvePocketBaseUrl('https://settings.example/', 'https://env.example/'),
+			'https://settings.example/'
+		);
+	});
+
+	test('resolvePocketBaseUrl falls back to env when setting is empty', () => {
+		assert.strictEqual(resolvePocketBaseUrl('', 'https://env.example/'), 'https://env.example/');
+		assert.strictEqual(resolvePocketBaseUrl(undefined, 'https://env.example/'), 'https://env.example/');
+	});
+
+	test('resolvePocketBaseUrl returns empty when nothing is configured', () => {
+		assert.strictEqual(resolvePocketBaseUrl(), '');
+		assert.strictEqual(resolvePocketBaseUrl('   ', '   '), '');
+	});
+});

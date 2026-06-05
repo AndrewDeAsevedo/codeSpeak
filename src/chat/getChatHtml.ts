@@ -34,7 +34,31 @@ export function getChatHtml(): string {
 			padding: 8px;
 			display: flex;
 			flex-direction: column;
-			gap: 8px;
+			gap: 10px;
+		}
+
+		.message-group {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			max-width: 100%;
+		}
+
+		.message-group.self {
+			align-self: flex-end;
+			align-items: flex-end;
+		}
+
+		.message-group.other {
+			align-self: flex-start;
+			align-items: flex-start;
+		}
+
+		.message-author {
+			font-size: 0.8em;
+			font-weight: 600;
+			color: var(--vscode-descriptionForeground);
+			margin-top: 2px;
 		}
 
 		.message {
@@ -46,14 +70,12 @@ export function getChatHtml(): string {
 			word-break: break-word;
 		}
 
-		.message.user {
-			align-self: flex-end;
+		.message.self {
 			background: var(--vscode-button-background);
 			color: var(--vscode-button-foreground);
 		}
 
-		.message.assistant {
-			align-self: flex-start;
+		.message.other {
 			background: var(--vscode-input-background);
 			border: 1px solid var(--vscode-input-border, transparent);
 		}
@@ -64,6 +86,46 @@ export function getChatHtml(): string {
 			color: var(--vscode-descriptionForeground);
 			max-width: 320px;
 			line-height: 1.6;
+		}
+
+		.auth-actions {
+			display: flex;
+			justify-content: center;
+			gap: 8px;
+			margin-top: 12px;
+		}
+
+		.auth-actions button {
+			border: none;
+			border-radius: 6px;
+			padding: 6px 14px;
+			font: inherit;
+			cursor: pointer;
+			background: var(--vscode-button-background);
+			color: var(--vscode-button-foreground);
+		}
+
+		#auth-bar {
+			display: none;
+			align-items: center;
+			justify-content: space-between;
+			gap: 8px;
+			padding: 6px 8px 0;
+			font-size: 0.85em;
+			color: var(--vscode-descriptionForeground);
+		}
+
+		#auth-bar.visible {
+			display: flex;
+		}
+
+		#sign-out {
+			border: none;
+			background: transparent;
+			color: var(--vscode-textLink-foreground);
+			font: inherit;
+			cursor: pointer;
+			padding: 0;
 		}
 
 		#composer {
@@ -131,10 +193,17 @@ export function getChatHtml(): string {
 	</style>
 </head>
 <body>
+	<div id="auth-bar">
+		<span id="auth-user"></span>
+		<button type="button" id="sign-out">Sign Out</button>
+	</div>
 	<div id="messages">
 		<div class="empty-state" id="empty-state">
 			<strong>codeChat</strong><br />
-			Ask a question about your code. The backend is not connected yet.
+			Sign in to load your messages.
+			<div class="auth-actions">
+				<button type="button" id="sign-in">Sign In</button>
+			</div>
 		</div>
 	</div>
 	<div id="status"></div>
@@ -147,44 +216,138 @@ export function getChatHtml(): string {
 	<script>
 		const vscode = acquireVsCodeApi();
 		const messagesEl = document.getElementById('messages');
-		const emptyStateEl = document.getElementById('empty-state');
 		const statusEl = document.getElementById('status');
 		const formEl = document.getElementById('composer');
 		const inputEl = document.getElementById('input');
 		const sendEl = document.getElementById('send');
 		const clearEl = document.getElementById('clear');
+		const authBarEl = document.getElementById('auth-bar');
+		const authUserEl = document.getElementById('auth-user');
+		const signInEl = document.getElementById('sign-in');
+		const signOutEl = document.getElementById('sign-out');
 
 		let isLoading = false;
+		let signedIn = false;
+		let currentUser = '';
+
+		function hasMessages() {
+			return messagesEl.querySelector('.message-group') !== null;
+		}
+
+		function updateEmptyState(user) {
+			let empty = document.getElementById('empty-state');
+			if (!empty) {
+				empty = document.createElement('div');
+				empty.className = 'empty-state';
+				empty.id = 'empty-state';
+				messagesEl.appendChild(empty);
+			}
+
+			if (!signedIn) {
+				empty.innerHTML = '<strong>codeChat</strong><br />Sign in to load your messages.<div class="auth-actions"><button type="button" id="sign-in">Sign In</button></div>';
+				empty.querySelector('#sign-in').addEventListener('click', () => {
+					vscode.postMessage({ type: 'signIn' });
+				});
+				return;
+			}
+
+			const userLine = user ? 'Signed in as <strong>' + user + '</strong>.<br />' : '';
+			empty.innerHTML = '<strong>codeChat</strong><br />' + userLine + 'No messages yet.';
+		}
+
+		function setAuthState(nextSignedIn, user) {
+			signedIn = nextSignedIn;
+			currentUser = user || '';
+			authBarEl.classList.toggle('visible', signedIn);
+			authUserEl.textContent = signedIn && currentUser ? 'Signed in as ' + currentUser : '';
+			inputEl.disabled = !signedIn || isLoading;
+			sendEl.disabled = !signedIn || isLoading;
+
+			if (!hasMessages()) {
+				updateEmptyState(user);
+			}
+		}
 
 		function setLoading(loading) {
 			isLoading = loading;
-			sendEl.disabled = loading;
-			inputEl.disabled = loading;
-			statusEl.textContent = loading ? 'Waiting for response...' : '';
+			inputEl.disabled = !signedIn || loading;
+			sendEl.disabled = !signedIn || loading;
+			statusEl.textContent = loading ? 'Sending...' : '';
 			statusEl.classList.toggle('error', false);
 		}
 
-		function appendMessage(role, text) {
-			if (emptyStateEl) {
-				emptyStateEl.remove();
-			}
+		function getLastMessageGroup() {
+			const groups = messagesEl.querySelectorAll('.message-group');
+			return groups.length ? groups[groups.length - 1] : null;
+		}
 
+		function isSameSender(group, role, author) {
+			if (!group) {
+				return false;
+			}
+			return group.dataset.role === role && group.dataset.author === (author || '');
+		}
+
+		function createMessageBubble(role, text) {
 			const messageEl = document.createElement('div');
 			messageEl.className = 'message ' + role;
 			messageEl.textContent = text;
-			messagesEl.appendChild(messageEl);
+			return messageEl;
+		}
+
+		function setGroupAuthor(group, author) {
+			const existingAuthor = group.querySelector('.message-author');
+			if (existingAuthor) {
+				existingAuthor.remove();
+			}
+
+			if (!author) {
+				return;
+			}
+
+			const authorEl = document.createElement('div');
+			authorEl.className = 'message-author';
+			authorEl.textContent = author;
+			group.appendChild(authorEl);
+		}
+
+		function createMessageGroup(role, text, author) {
+			const groupEl = document.createElement('div');
+			groupEl.className = 'message-group ' + role;
+			groupEl.dataset.role = role;
+			groupEl.dataset.author = author || '';
+			groupEl.appendChild(createMessageBubble(role, text));
+			setGroupAuthor(groupEl, author);
+			return groupEl;
+		}
+
+		function appendMessage(role, text, author) {
+			const emptyState = document.getElementById('empty-state');
+			if (emptyState) {
+				emptyState.remove();
+			}
+
+			const lastGroup = getLastMessageGroup();
+			if (isSameSender(lastGroup, role, author)) {
+				const authorEl = lastGroup.querySelector('.message-author');
+				if (authorEl) {
+					lastGroup.insertBefore(createMessageBubble(role, text), authorEl);
+				} else {
+					lastGroup.appendChild(createMessageBubble(role, text));
+				}
+				setGroupAuthor(lastGroup, author);
+			} else {
+				messagesEl.appendChild(createMessageGroup(role, text, author));
+			}
+
 			messagesEl.scrollTop = messagesEl.scrollHeight;
 		}
 
 		function clearMessages() {
 			messagesEl.innerHTML = '';
-			const empty = document.createElement('div');
-			empty.className = 'empty-state';
-			empty.id = 'empty-state';
-			empty.innerHTML = '<strong>codeChat</strong><br />Ask a question about your code. The backend is not connected yet.';
-			messagesEl.appendChild(empty);
 			statusEl.textContent = '';
 			statusEl.classList.remove('error');
+			updateEmptyState(currentUser);
 		}
 
 		formEl.addEventListener('submit', (event) => {
@@ -206,6 +369,14 @@ export function getChatHtml(): string {
 			vscode.postMessage({ type: 'clearChat' });
 		});
 
+		signInEl.addEventListener('click', () => {
+			vscode.postMessage({ type: 'signIn' });
+		});
+
+		signOutEl.addEventListener('click', () => {
+			vscode.postMessage({ type: 'signOut' });
+		});
+
 		inputEl.addEventListener('keydown', (event) => {
 			if (event.key === 'Enter' && !event.shiftKey) {
 				event.preventDefault();
@@ -218,11 +389,16 @@ export function getChatHtml(): string {
 			inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
 		});
 
+		vscode.postMessage({ type: 'ready' });
+
 		window.addEventListener('message', (event) => {
 			const message = event.data;
 			switch (message.type) {
 				case 'appendMessage':
-					appendMessage(message.role, message.text);
+					appendMessage(message.role, message.text, message.author);
+					break;
+				case 'setAuthState':
+					setAuthState(message.signedIn, message.user);
 					break;
 				case 'setLoading':
 					setLoading(message.loading);

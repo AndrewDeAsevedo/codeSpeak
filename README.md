@@ -1,71 +1,123 @@
-# codechat README
+# codeChat
 
-This is the README for your extension "codechat". After writing up a brief description, we recommend including the following sections.
+A VS Code sidebar chat extension backed by [PocketBase](https://pocketbase.io/). Sign in, send messages, and see everyone else's messages in a shared room.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- Sidebar chat panel in the Explorer view
+- PocketBase authentication with saved sessions
+- Shared message history loaded on sign-in
+- Your messages on the right, everyone else's on the left
+- Author names shown above each message
 
-For example if there is an image subfolder under your extension project workspace:
+## Getting Started
 
-\!\[feature X\]\(images/feature-x.png\)
+### 1. Install dependencies
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+```bash
+npm install
+```
 
-## Requirements
+### 2. Run the extension
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+Press **F5** in VS Code to launch the Extension Development Host, then open the **codeChat** panel in the sidebar.
 
-## Extension Settings
+You can also focus the panel with **Cmd+Shift+C** (Mac) or **Ctrl+Shift+C** (Windows/Linux).
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+### 3. Sign in
 
-For example:
+Click **Sign In** in the chat panel, or run **codeChat: Sign In** from the Command Palette. Use your PocketBase username or email and password.
 
-This extension contributes the following settings:
+## PocketBase Setup
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+codeChat expects a PocketBase instance with a `users` auth collection and a `messages` collection.
 
-## Known Issues
+### `messages` collection fields
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+| Field | Type | Notes |
+|-------|------|-------|
+| `text` | Plain text | Message body |
+| `user` | Relation → `users` | Message author |
 
-## Release Notes
+### API rules
 
-Users appreciate release notes as you update your extension.
+Authenticated users must be able to create and list messages. In the PocketBase admin, set these rules on the `messages` collection:
 
-### 1.0.0
+| Rule | Value |
+|------|-------|
+| **List/Search** | `@request.auth.id != ""` |
+| **View** | `@request.auth.id != ""` |
+| **Create** | `@request.auth.id != ""` |
 
-Initial release of ...
+On the `users` collection, allow authenticated users to view records so author names can expand:
 
-### 1.0.1
+| Rule | Value |
+|------|-------|
+| **View** | `@request.auth.id != ""` |
 
-Fixed issue #.
+If messages save but do not load, the **List/Search** rule is almost always the problem.
 
-### 1.1.0
+## Configuration
 
-Added features X, Y, and Z.
+Set your PocketBase server URL using **one** of these (VS Code setting wins if both are set):
 
----
+### Option A: `.env` (recommended for local dev)
 
-## Following extension guidelines
+```bash
+cp .env.example .env
+```
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+```env
+POCKETBASE_URL=https://your-instance.pockethost.io/
+```
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+`.env` is gitignored. Never put passwords or API keys in it — sign in through the extension instead.
 
-## Working with Markdown
+### Option B: VS Code settings
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+```json
+{
+  "codechat.pocketbaseUrl": "https://your-instance.pockethost.io/"
+}
+```
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+| Setting | Description |
+|---------|-------------|
+| `codechat.pocketbaseUrl` | PocketBase server URL (overrides `.env`) |
 
-## For more information
+## Commands
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+| Command | Description |
+|---------|-------------|
+| `codeChat: Focus codeChat` | Open the chat sidebar |
+| `codeChat: Sign In` | Sign in to PocketBase |
+| `codeChat: Sign Out` | Clear the saved session |
+| `codeChat: Show Logs` | Open the codeChat output channel |
 
-**Enjoy!**
+## Development
+
+```bash
+npm run compile   # Build TypeScript
+npm run watch     # Watch mode
+npm run lint      # ESLint
+npm test          # Run tests in a VS Code test host
+```
+
+### Project structure
+
+```
+src/
+  extension.ts           # Extension entry point
+  chat/
+    chatViewProvider.ts  # Sidebar webview and message flow
+    pocketbaseClient.ts  # Auth and PocketBase client
+    messageUtils.ts      # Message parsing helpers
+    getChatHtml.ts       # Webview UI
+    types.ts             # Webview message types
+    logger.ts            # Output channel logging
+  test/                  # Unit and integration tests
+```
+
+## License
+
+MIT
