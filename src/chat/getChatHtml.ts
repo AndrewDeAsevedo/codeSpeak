@@ -3,6 +3,7 @@ export function getChatHtml(): string {
 		"default-src 'none'",
 		"style-src 'unsafe-inline'",
 		"script-src 'unsafe-inline'",
+		"img-src https: http: data:",
 	].join('; ');
 
 	return `<!DOCTYPE html>
@@ -66,8 +67,49 @@ export function getChatHtml(): string {
 			padding: 10px 12px;
 			border-radius: 8px;
 			line-height: 1.5;
-			white-space: pre-wrap;
 			word-break: break-word;
+		}
+
+		.message-content {
+			white-space: pre-wrap;
+		}
+
+		.message-gif {
+			display: block;
+			max-width: min(280px, 100%);
+			max-height: 220px;
+			border-radius: 6px;
+			margin-top: 6px;
+			object-fit: contain;
+		}
+
+		.message-gif:first-child {
+			margin-top: 0;
+		}
+
+		.message-time {
+			display: block;
+			margin-top: 4px;
+			font-size: 0.68em;
+			line-height: 1.2;
+			opacity: 0.65;
+			text-align: right;
+		}
+
+		.message.other .message-time {
+			color: var(--vscode-descriptionForeground);
+		}
+
+		.message.self .message-time {
+			color: inherit;
+		}
+
+		.message.gif-only {
+			padding: 6px;
+		}
+
+		.message.gif-only .message-time {
+			padding: 0 4px;
 		}
 
 		.message.self {
@@ -288,10 +330,43 @@ export function getChatHtml(): string {
 			return group.dataset.role === role && group.dataset.author === (author || '');
 		}
 
-		function createMessageBubble(role, text) {
+		function createMessageBubble(role, text, timestamp, segments) {
 			const messageEl = document.createElement('div');
-			messageEl.className = 'message ' + role;
-			messageEl.textContent = text;
+			const contentSegments = segments && segments.length
+				? segments
+				: [{ type: 'text', value: text }];
+			const isGifOnly = contentSegments.every((segment) => segment.type === 'gif');
+
+			messageEl.className = 'message ' + role + (isGifOnly ? ' gif-only' : '');
+
+			const contentEl = document.createElement('div');
+			contentEl.className = 'message-content';
+
+			for (const segment of contentSegments) {
+				if (segment.type === 'gif') {
+					const imgEl = document.createElement('img');
+					imgEl.className = 'message-gif';
+					imgEl.src = segment.url;
+					imgEl.alt = 'GIF';
+					imgEl.loading = 'lazy';
+					contentEl.appendChild(imgEl);
+					continue;
+				}
+
+				if (segment.value) {
+					contentEl.appendChild(document.createTextNode(segment.value));
+				}
+			}
+
+			messageEl.appendChild(contentEl);
+
+			if (timestamp) {
+				const timeEl = document.createElement('time');
+				timeEl.className = 'message-time';
+				timeEl.textContent = timestamp;
+				messageEl.appendChild(timeEl);
+			}
+
 			return messageEl;
 		}
 
@@ -311,17 +386,17 @@ export function getChatHtml(): string {
 			group.appendChild(authorEl);
 		}
 
-		function createMessageGroup(role, text, author) {
+		function createMessageGroup(role, text, author, timestamp, segments) {
 			const groupEl = document.createElement('div');
 			groupEl.className = 'message-group ' + role;
 			groupEl.dataset.role = role;
 			groupEl.dataset.author = author || '';
-			groupEl.appendChild(createMessageBubble(role, text));
+			groupEl.appendChild(createMessageBubble(role, text, timestamp, segments));
 			setGroupAuthor(groupEl, author);
 			return groupEl;
 		}
 
-		function appendMessage(role, text, author) {
+		function appendMessage(role, text, author, timestamp, segments) {
 			const emptyState = document.getElementById('empty-state');
 			if (emptyState) {
 				emptyState.remove();
@@ -330,14 +405,15 @@ export function getChatHtml(): string {
 			const lastGroup = getLastMessageGroup();
 			if (isSameSender(lastGroup, role, author)) {
 				const authorEl = lastGroup.querySelector('.message-author');
+				const bubble = createMessageBubble(role, text, timestamp, segments);
 				if (authorEl) {
-					lastGroup.insertBefore(createMessageBubble(role, text), authorEl);
+					lastGroup.insertBefore(bubble, authorEl);
 				} else {
-					lastGroup.appendChild(createMessageBubble(role, text));
+					lastGroup.appendChild(bubble);
 				}
 				setGroupAuthor(lastGroup, author);
 			} else {
-				messagesEl.appendChild(createMessageGroup(role, text, author));
+				messagesEl.appendChild(createMessageGroup(role, text, author, timestamp, segments));
 			}
 
 			messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -395,7 +471,13 @@ export function getChatHtml(): string {
 			const message = event.data;
 			switch (message.type) {
 				case 'appendMessage':
-					appendMessage(message.role, message.text, message.author);
+					appendMessage(
+						message.role,
+						message.text,
+						message.author,
+						message.timestamp,
+						message.segments
+					);
 					break;
 				case 'setAuthState':
 					setAuthState(message.signedIn, message.user);

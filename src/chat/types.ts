@@ -8,7 +8,14 @@ export type WebviewToExtensionMessage =
 
 /** Messages sent from the extension to the webview. */
 export type ExtensionToWebviewMessage =
-	| { type: 'appendMessage'; role: 'self' | 'other'; text: string; author?: string }
+	| {
+			type: 'appendMessage';
+			role: 'self' | 'other';
+			text: string;
+			author?: string;
+			timestamp?: string;
+			segments?: Array<{ type: 'text'; value: string } | { type: 'gif'; url: string }>;
+	  }
 	| { type: 'setAuthState'; signedIn: boolean; user?: string }
 	| { type: 'setLoading'; loading: boolean }
 	| { type: 'error'; message: string }

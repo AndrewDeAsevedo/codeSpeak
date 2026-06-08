@@ -21,5 +21,8 @@ suite('getChatHtml', () => {
 		const html = getChatHtml();
 		assert.match(html, /Content-Security-Policy/);
 		assert.match(html, /default-src 'none'/);
+		assert.match(html, /img-src https: http: data:/);
+		assert.match(html, /message-time/);
+		assert.match(html, /message-gif/);
 	});
 });

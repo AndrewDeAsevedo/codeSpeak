@@ -1,8 +1,11 @@
 import * as assert from 'assert';
 import {
+	formatMessageTimestamp,
 	getMessageAuthor,
 	getMessageSide,
 	getMessageText,
+	isGifUrl,
+	parseMessageContent,
 	resolveDisplayName,
 	type MessageRecord,
 } from '../chat/messageUtils';
@@ -74,5 +77,41 @@ suite('messageUtils', () => {
 
 		assert.strictEqual(getMessageSide(ownMessage, 'user_1'), 'self');
 		assert.strictEqual(getMessageSide(otherMessage, 'user_1'), 'other');
+	});
+
+	test('isGifUrl detects direct gif links and common hosts', () => {
+		assert.strictEqual(isGifUrl('https://example.com/image.gif'), true);
+		assert.strictEqual(isGifUrl('https://example.com/image.gif?size=large'), true);
+		assert.strictEqual(isGifUrl('https://media.giphy.com/media/abc123/giphy.gif'), true);
+		assert.strictEqual(isGifUrl('https://media.tenor.com/abc123/tenor.gif'), true);
+		assert.strictEqual(isGifUrl('https://example.com/image.png'), false);
+		assert.strictEqual(isGifUrl('not-a-url'), false);
+	});
+
+	test('parseMessageContent embeds gif urls and keeps surrounding text', () => {
+		const segments = parseMessageContent('look https://example.com/a.gif now');
+		assert.deepStrictEqual(segments, [
+			{ type: 'text', value: 'look ' },
+			{ type: 'gif', url: 'https://example.com/a.gif' },
+			{ type: 'text', value: ' now' },
+		]);
+	});
+
+	test('parseMessageContent returns plain text when no gif urls are present', () => {
+		assert.deepStrictEqual(parseMessageContent('hello world'), [{ type: 'text', value: 'hello world' }]);
+	});
+
+	test('formatMessageTimestamp shows time only for today', () => {
+		const now = new Date('2026-06-05T18:00:00');
+		const timestamp = formatMessageTimestamp('2026-06-05 15:30:00.000Z', now);
+		assert.doesNotMatch(timestamp, /Yesterday/);
+		assert.doesNotMatch(timestamp, /Jun/);
+		assert.ok(timestamp.length > 0);
+	});
+
+	test('formatMessageTimestamp shows yesterday label', () => {
+		const now = new Date('2026-06-05T18:00:00');
+		const timestamp = formatMessageTimestamp('2026-06-04 15:30:00.000Z', now);
+		assert.match(timestamp, /Yesterday/);
 	});
 });

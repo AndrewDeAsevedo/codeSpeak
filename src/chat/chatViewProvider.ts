@@ -3,9 +3,11 @@ import { getChatHtml } from './getChatHtml';
 import { getSyncIntervalMs } from './config';
 import { log, logError } from './logger';
 import {
+	formatMessageTimestamp,
 	getMessageAuthor,
 	getMessageSide,
 	getMessageText,
+	parseMessageContent,
 	type MessageRecord,
 } from './messageUtils';
 import { formatPocketBaseError, PocketBaseService } from './pocketbaseClient';
@@ -156,11 +158,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private toAppendMessage(record: MessageRecord, currentUserId: string): ExtensionToWebviewMessage {
+		const text = getMessageText(record);
+
 		return {
 			type: 'appendMessage',
 			role: getMessageSide(record, currentUserId),
-			text: getMessageText(record),
+			text,
 			author: getMessageAuthor(record),
+			timestamp: formatMessageTimestamp(record.created),
+			segments: parseMessageContent(text),
 		};
 	}
 
@@ -274,7 +280,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		}
 
 		const author = PocketBaseService.getUserDisplayName();
-		this.postMessage({ type: 'appendMessage', role: 'self', text, author });
+		const created = new Date().toISOString();
+		this.postMessage({
+			type: 'appendMessage',
+			role: 'self',
+			text,
+			author,
+			timestamp: formatMessageTimestamp(created),
+			segments: parseMessageContent(text),
+		});
 		this.postMessage({ type: 'setLoading', loading: true });
 
 		try {
